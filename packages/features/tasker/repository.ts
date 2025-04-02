@@ -1,8 +1,12 @@
 import { type Prisma } from "@prisma/client";
 
+import logger from "@calcom/lib/logger";
+import { safeStringify } from "@calcom/lib/safeStringify";
 import db from "@calcom/prisma";
 
 import { type TaskTypes } from "./tasker";
+
+const log = logger.getSubLogger({ prefix: ["[tasker] repository"] });
 
 const whereSucceeded: Prisma.TaskWhereInput = {
   succeededAt: { not: null },
@@ -43,7 +47,7 @@ export class Task {
     options: { scheduledAt?: Date; maxAttempts?: number } = {}
   ) {
     const { scheduledAt, maxAttempts } = options;
-    console.info("Creating task", { type, payload, scheduledAt, maxAttempts });
+    log.info("Creating task", { type, payload, scheduledAt, maxAttempts });
     const newTask = await db.task.create({
       data: {
         payload,
@@ -56,7 +60,7 @@ export class Task {
   }
 
   static async getNextBatch() {
-    console.info("Getting next batch of tasks", makeWhereUpcomingTasks());
+    log.info("Getting next batch of tasks", makeWhereUpcomingTasks());
     return db.task.findMany({
       where: makeWhereUpcomingTasks(),
       orderBy: {
@@ -134,6 +138,7 @@ export class Task {
   }
 
   static async succeed(taskId: string) {
+    log.info("Mark task as succeeded", { taskId });
     return db.task.update({
       where: {
         id: taskId,
@@ -165,5 +170,29 @@ export class Task {
     //     ],
     //   },
     // });
+  }
+
+  static async updateProgress({ taskId, payload }: { taskId: string; payload: string }) {
+    log.info("Updating task progress", { taskId, payload });
+    return db.task.update({
+      where: {
+        id: taskId,
+      },
+      data: {
+        payload,
+      },
+    });
+  }
+
+  static async cancelWhere(where: { payloadContains: string }) {
+    const deleted = await db.task.deleteMany({
+      where: {
+        payload: {
+          contains: where.payloadContains,
+        },
+      },
+    });
+    log.info("Cancelled tasks", safeStringify({ count: deleted.count }));
+    return deleted.count;
   }
 }

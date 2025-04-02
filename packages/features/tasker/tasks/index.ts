@@ -22,12 +22,25 @@ const tasks: Record<TaskTypes, () => Promise<TaskHandler>> = {
   translateEventTypeData: () =>
     import("./translateEventTypeData").then((module) => module.translateEventTypeData),
   createCRMEvent: () => import("./crm/createCRMEvent").then((module) => module.createCRMEvent),
+  delegationCredentialSelectedCalendars: () =>
+    import("./delegationCredentialSelectedCalendars").then(
+      (module) => module.delegationCredentialSelectedCalendars
+    ),
 };
 
-export const tasksConfig = {
+export const tasksConfig: Partial<
+  Record<TaskTypes, { minRetryIntervalMins?: number; maxAttempts: number } & Record<string, unknown>>
+> = {
   createCRMEvent: {
     minRetryIntervalMins: IS_PRODUCTION ? 10 : 1,
     maxAttempts: 10,
   },
+  delegationCredentialSelectedCalendars: {
+    // Keep it low to avoid reaching per service account rate limit
+    // e.g. For Google, it is 10*60 requests per minute per service account
+    take: 100,
+    maxAttempts: 5,
+  },
 };
+
 export default tasks;

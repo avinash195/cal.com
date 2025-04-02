@@ -27,8 +27,18 @@ export class InternalTasker implements Tasker {
       const taskConfig = tasksConfig[task.type as keyof typeof tasksConfig];
       const taskHandler = await taskHandlerGetter();
       return taskHandler(task.payload)
-        .then(async () => {
-          await Task.succeed(task.id);
+        .then(async (result) => {
+          // undefined result means consider completed
+          if (!result) {
+            await Task.succeed(task.id);
+            return;
+          }
+          const isCompleted = result.completed;
+          if (isCompleted) {
+            await Task.succeed(task.id);
+          } else {
+            await Task.updateProgress({ taskId: task.id, payload: result.newPayload });
+          }
         })
         .catch(async (error) => {
           console.info(`Retrying task ${task.id}: ${error}`);

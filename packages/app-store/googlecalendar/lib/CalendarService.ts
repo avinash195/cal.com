@@ -797,7 +797,8 @@ export default class GoogleCalendarService implements Calendar {
     dateFrom: string,
     dateTo: string,
     selectedCalendars: IntegrationCalendar[],
-    shouldServeCache?: boolean
+    shouldServeCache?: boolean,
+    fallbackToPrimary?: boolean
   ): Promise<EventBusyDate[]> {
     this.log.debug("Getting availability", safeStringify({ dateFrom, dateTo, selectedCalendars }));
     const calendar = await this.authedCalendar();
@@ -810,9 +811,17 @@ export default class GoogleCalendarService implements Calendar {
     }
     const getCalIds = async () => {
       if (selectedCalendarIds.length !== 0) return selectedCalendarIds;
-      const cals = await this.getAllCalendars(calendar, ["id"]);
+      const cals = await this.getAllCalendars(calendar, ["id", "primary"]);
       if (!cals.length) return [];
-      return cals.reduce((c, cal) => (cal.id ? [...c, cal.id] : c), [] as string[]);
+      const validCalIds = cals.reduce((c, cal) => (cal.id ? [...c, cal.id] : c), [] as string[]);
+      const primaryCal = cals.find((cal): cal is { id: string } => !!cal.primary && !!cal.id);
+      if (fallbackToPrimary) {
+        if (primaryCal) {
+          return [primaryCal.id];
+        }
+        return [validCalIds[0]];
+      }
+      return validCalIds;
     };
 
     try {
@@ -902,6 +911,15 @@ export default class GoogleCalendarService implements Calendar {
       this.log.error("There was an error getting calendars: ", safeStringify(error));
       throw error;
     }
+  }
+
+  /**
+   * Better alternative to `getPrimaryCalendar` that doesn't require any argument
+   */
+  async fetchPrimaryCalendar() {
+    const calendar = await this.authedCalendar();
+    const primaryCalendar = await this.getPrimaryCalendar(calendar);
+    return primaryCalendar;
   }
 
   // It would error if the delegation credential is not set up correctly
